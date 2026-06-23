@@ -8,12 +8,12 @@ plugins {
 
 android {
   namespace = "com.example"
-  compileSdk { version = release(36) { minorApiLevel = 1 } }
+  compileSdk = 35
 
   defaultConfig {
     applicationId = "com.aistudio.bhojannepal.dfgqwy"
     minSdk = 24
-    targetSdk = 36
+    targetSdk = 35
     versionCode = 1
     versionName = "1.0"
 
@@ -119,3 +119,25 @@ dependencies {
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
 }
+
+val buildDirFile = project.layout.buildDirectory.asFile
+val rootDirFile = rootDir
+tasks.register("copyApkToOutputsAndDownload") {
+  val srcProvider = buildDirFile.map { it.resolve("outputs/apk/debug/app-debug.apk") }
+  val destDir = rootDirFile
+  doLast {
+    val srcFile = srcProvider.get()
+    if (srcFile.exists()) {
+      val dest1 = destDir.resolve(".build-outputs/app-debug.apk")
+      val dest2 = destDir.resolve("APK_DOWNLOAD/app-debug.apk")
+      dest1.parentFile.mkdirs()
+      dest2.parentFile.mkdirs()
+      srcFile.copyTo(dest1, overwrite = true)
+      srcFile.copyTo(dest2, overwrite = true)
+      println("COPIED_SUCCESS: ${dest1.absolutePath} (Size: ${dest1.length()} bytes) and ${dest2.absolutePath} (Size: ${dest2.length()} bytes)")
+    } else {
+      println("SOURCE_APK_MISSING: ${srcFile.absolutePath}")
+    }
+  }
+}
+

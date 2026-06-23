@@ -1,10 +1,18 @@
 package com.example.ui
 
 import android.app.Application
+import android.content.Context
+import android.content.pm.PackageManager
+import android.location.Geocoder
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
+import android.os.Bundle
 import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.FoodItem
@@ -15,10 +23,12 @@ import com.example.db.CartItemEntity
 import com.example.db.OrderEntity
 import com.example.db.ReviewEntity
 import com.example.notification.NotificationHelper
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -80,12 +90,145 @@ class BhojanViewModel(application: Application) : AndroidViewModel(application) 
         )
     )
 
+    // --- LOCATION SENSING STATE ---
+    var isDetectingLocation by mutableStateOf(false)
+    var locationErrorMsg by mutableStateOf<String?>(null)
+
+    fun detectDeviceLocation(onLocationDetected: (String) -> Unit = {}) {
+        isDetectingLocation = true
+        locationErrorMsg = null
+        val context = getApplication<Application>().applicationContext
+        
+        val hasFineLocation = ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val hasCoarseLocation = ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        
+        if (!hasFineLocation && !hasCoarseLocation) {
+            locationErrorMsg = "Permissions not granted. Please allow location access."
+            isDetectingLocation = false
+            return
+        }
+        
+        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        if (locationManager == null) {
+            locationErrorMsg = "Location services not available on this device."
+            isDetectingLocation = false
+            return
+        }
+        
+        try {
+            val isGpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+            val isNetworkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+            
+            if (!isGpsEnabled && !isNetworkEnabled) {
+                locationErrorMsg = "GPS/Network location is disabled. Please enable device location."
+                isDetectingLocation = false
+                return
+            }
+            
+            var bestLocation: Location? = null
+            if (isNetworkEnabled) {
+                bestLocation = locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+            }
+            if (bestLocation == null && isGpsEnabled) {
+                bestLocation = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+            }
+            
+            if (bestLocation != null) {
+                updateLocationState(bestLocation, onLocationDetected)
+            } else {
+                val provider = if (isNetworkEnabled) LocationManager.NETWORK_PROVIDER else LocationManager.GPS_PROVIDER
+                locationManager.requestSingleUpdate(provider, object : LocationListener {
+                    override fun onLocationChanged(location: Location) {
+                        updateLocationState(location, onLocationDetected)
+                    }
+                    override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+                    override fun onProviderEnabled(provider: String) {}
+                    override fun onProviderDisabled(provider: String) {}
+                }, context.mainLooper)
+            }
+        } catch (e: SecurityException) {
+            locationErrorMsg = "Permissions not satisfied."
+            isDetectingLocation = false
+        } catch (e: Exception) {
+            locationErrorMsg = "Sensing error: ${e.localizedMessage}"
+            isDetectingLocation = false
+        }
+    }
+
+    private fun updateLocationState(location: Location, onLocationDetected: (String) -> Unit) {
+        val context = getApplication<Application>().applicationContext
+        viewModelScope.launch(Dispatchers.IO) {
+            var addressName = ""
+            var areaName = "Kathmandu Valley"
+            
+            try {
+                val geocoder = Geocoder(context, Locale.getDefault())
+                val addresses = geocoder.getFromLocation(location.latitude, location.longitude, 1)
+                if (!addresses.isNullOrEmpty()) {
+                    val address = addresses[0]
+                    val subLocality = address.subLocality ?: address.locality ?: address.subAdminArea ?: ""
+                    val thoroughfare = address.thoroughfare ?: address.featureName ?: ""
+                    addressName = listOfNotNull(thoroughfare.takeIf { it.isNotBlank() }, subLocality.takeIf { it.isNotBlank() }, address.locality ?: "").joinToString(", ")
+                    if (addressName.isBlank()) {
+                        addressName = address.getAddressLine(0) ?: "Pinpoint"
+                    }
+                    areaName = address.subAdminArea ?: address.adminArea ?: "Kathmandu"
+                }
+            } catch (e: Exception) {
+                // Ignore and fallback
+            }
+            
+            if (addressName.isBlank()) {
+                addressName = getKathmanduApproxAreaName(location.latitude, location.longitude)
+            }
+            
+            val finalAddress = addressName
+            val finalArea = areaName
+            withContext(Dispatchers.Main) {
+                selectedLocation = selectedLocation.copy(
+                    addressLine = finalAddress,
+                    area = finalArea,
+                    latitude = location.latitude,
+                    longitude = location.longitude
+                )
+                isDetectingLocation = false
+                onLocationDetected(finalAddress)
+            }
+        }
+    }
+
+    private fun getKathmanduApproxAreaName(latitude: Double, longitude: Double): String {
+        val areas = listOf(
+            Triple("Balaju Balaju-16, Kathmandu", 27.7317, 85.3059),
+            Triple("Thamel Tourism Hub, Kathmandu", 27.7150, 85.3123),
+            Triple("Patandurbar Square, Lalitpur", 27.6744, 85.3250),
+            Triple("New Road Business Hub, Kathmandu", 27.7042, 85.3115),
+            Triple("Kapan Monastery Area, Kathmandu", 27.7365, 85.3621)
+        )
+        
+        var minDistance = Double.MAX_VALUE
+        var closestArea = "Detected GPS Pinpoint"
+        for (area in areas) {
+            val dist = java.lang.Math.hypot(latitude - area.second, longitude - area.third)
+            if (dist < minDistance) {
+                minDistance = dist
+                closestArea = area.first
+            }
+        }
+        
+        if (minDistance > 0.5) {
+            return "GPS (Lat: ${String.format(Locale.US, "%.4f", latitude)}, Lon: ${String.format(Locale.US, "%.4f", longitude)})"
+        }
+        return closestArea
+    }
+
     // --- SEARCH & FILTER ---
     var searchQuery by mutableStateOf("")
     var selectedCategory by mutableStateOf("All")
 
     // --- COUPON SYSTEM ---
     val availableCoupons = listOf(
+        PromoCode("BHOJAN20", "Special Bento Promo 20% off (Min spend Rs. 200)", discountPercent = 20, minOrderAmount = 200.0),
         PromoCode("NEPAL20", "Get 20% off on your order (Min spend Rs. 400)", discountPercent = 20, minOrderAmount = 400.0),
         PromoCode("BHOJAN50", "Flat Rs. 50 off on standard orders (Min spend Rs. 300)", flatDiscount = 50.0, minOrderAmount = 300.0)
     )

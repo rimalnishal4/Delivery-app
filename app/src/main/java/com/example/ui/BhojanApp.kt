@@ -48,6 +48,11 @@ import com.example.db.CartItemEntity
 import com.example.db.OrderEntity
 import com.example.db.ReviewEntity
 import com.example.ui.theme.*
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
+import android.Manifest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -399,42 +404,183 @@ fun LoginScreen(viewModel: BhojanViewModel) {
 // --- SCREEN 2: HOME (Food Browser, Category, Search, Heart Favorite) ---
 @Composable
 fun HomeScreen(viewModel: BhojanViewModel, favoriteList: List<com.example.db.FavoriteEntity>) {
+    val context = LocalContext.current
+    var showCouponsDialog by remember { mutableStateOf(false) }
+
+    if (showCouponsDialog) {
+        AlertDialog(
+            onDismissRequest = { showCouponsDialog = false },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.Loyalty, contentDescription = null, tint = BentoPrimary)
+                    Text("Available Bento Coupons", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Apply these special discount codes inside user checkout screen:", fontSize = 12.sp, color = Color.Gray)
+                    viewModel.availableCoupons.forEach { coupon ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = BentoSurface),
+                            border = BorderStroke(1.dp, BentoBorderColor)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(coupon.code, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, color = BentoPrimary)
+                                    Text(coupon.description, fontSize = 11.sp, color = BentoMutedText)
+                                }
+                                Button(
+                                    onClick = {
+                                        viewModel.couponInput = coupon.code
+                                        Toast.makeText(context, "${coupon.code} Coupon Selected! Go to Cart / Checkout to see saving.", Toast.LENGTH_SHORT).show()
+                                        showCouponsDialog = false
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = BentoPrimary),
+                                    contentPadding = PaddingValues(horizontal = 10.dp),
+                                    modifier = Modifier.height(28.dp)
+                                ) {
+                                    Text("Apply", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showCouponsDialog = false }) {
+                    Text("Close", color = BentoPrimary, fontWeight = FontWeight.Bold)
+                }
+            },
+            shape = RoundedCornerShape(28.dp),
+            containerColor = Color.White
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.White)
+            .background(BentoBg)
     ) {
-        // Search Box Header
+        // 1. Bento Dashboard: Location Info & Notification Bell
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = "Location Arrow",
+                        tint = BentoPrimary,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Text(
+                        text = "DELIVER TO",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = BentoPrimary,
+                        letterSpacing = 1.sp
+                    )
+                }
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = viewModel.selectedLocation.addressLine,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = BentoDarkText
+                    )
+                    Icon(
+                        imageVector = Icons.Default.ExpandMore,
+                        contentDescription = "Expand Location",
+                        tint = BentoDarkText,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(BentoSurface)
+                    .clickable {
+                        Toast.makeText(context, "Notifications system active and configured!", Toast.LENGTH_SHORT).show()
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Notifications,
+                    contentDescription = "Notifications",
+                    tint = BentoDarkText,
+                    modifier = Modifier.size(20.dp)
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 10.dp, end = 10.dp)
+                        .size(6.dp)
+                        .background(Color(0xFFB3261E), shape = CircleShape)
+                )
+            }
+        }
+
+        // 2. Bento Styled Search Bar
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(BhojanRed)
-                .padding(bottom = 16.dp, start = 16.dp, end = 16.dp, top = 8.dp)
+                .padding(horizontal = 16.dp, vertical = 6.dp)
         ) {
             OutlinedTextField(
                 value = viewModel.searchQuery,
                 onValueChange = { viewModel.searchQuery = it },
-                placeholder = { Text("Search delicious Nepalese food...", color = Color.Gray) },
-                leadingIcon = { Icon(imageVector = Icons.Default.Search, contentDescription = "Search", tint = BhojanRed) },
+                placeholder = { Text("Search dishes, momos or combo deals...", color = BentoMutedText, fontSize = 13.sp) },
+                leadingIcon = { Icon(imageVector = Icons.Default.Search, contentDescription = "Search icon", tint = BentoMutedText) },
                 trailingIcon = {
                     if (viewModel.searchQuery.isNotEmpty()) {
                         IconButton(onClick = { viewModel.searchQuery = "" }) {
-                            Icon(imageVector = Icons.Default.Clear, contentDescription = "Clear", tint = Color.Gray)
+                            Icon(imageVector = Icons.Default.Clear, contentDescription = "Clear", tint = BentoMutedText)
                         }
+                    } else {
+                        Icon(imageVector = Icons.Default.Tune, contentDescription = "Filter", tint = BentoMutedText)
                     }
                 },
                 singleLine = true,
                 shape = RoundedCornerShape(28.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                    focusedBorderColor = BhojanGold,
-                    unfocusedBorderColor = Color.Transparent
+                    focusedContainerColor = BentoSurface,
+                    unfocusedContainerColor = BentoSurface,
+                    focusedBorderColor = BentoPrimary.copy(alpha = 0.5f),
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedTextColor = BentoDarkText,
+                    unfocusedTextColor = BentoDarkText
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(54.dp)
-                    .shadow(4.dp, shape = RoundedCornerShape(28.dp))
+                    .height(50.dp)
                     .testTag("search_field")
             )
         }
@@ -442,11 +588,313 @@ fun HomeScreen(viewModel: BhojanViewModel, favoriteList: List<com.example.db.Fav
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .background(BhojanCream)
+                .background(BentoBg)
         ) {
-            // Banner Combos slider
+            // Hero Promo Card inside Bento Dashboard
             item {
                 FeaturedBanner(viewModel)
+            }
+
+            // Quick Actions / Categories Grid Blocks
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Menu (bg-purple)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(96.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(BentoPillMenu)
+                            .clickable {
+                                viewModel.selectedCategory = "All"
+                                viewModel.searchQuery = ""
+                                Toast.makeText(context, "Full list of dishes loaded!", Toast.LENGTH_SHORT).show()
+                            }
+                            .padding(12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.RestaurantMenu,
+                                contentDescription = "Menu icon bento",
+                                tint = BentoPillMenuText,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                "MENU",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = BentoPillMenuText
+                            )
+                        }
+                    }
+
+                    // Favorites (bg-lilac)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(96.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(BentoPillFavorites)
+                            .clickable {
+                                if (favoriteList.isEmpty()) {
+                                    Toast.makeText(context, "No favorites added yet! Tap hearts in menu.", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    viewModel.selectedCategory = "Traditional Khaja"
+                                    Toast.makeText(context, "Displaying Nepalese Specialties!", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            .padding(12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.Favorite,
+                                contentDescription = "Favorites icon bento",
+                                tint = BentoPillFavoritesText,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                "FAVORITES",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = BentoPillFavoritesText
+                            )
+                        }
+                    }
+
+                    // Coupons (bg-pink)
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(96.dp)
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(BentoPillCoupons)
+                            .clickable {
+                                showCouponsDialog = true
+                            }
+                            .padding(12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.Loyalty,
+                                contentDescription = "Coupons icon bento",
+                                tint = BentoPillCouponsText,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                "COUPONS",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = BentoPillCouponsText
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Recent Order / Tracking Row
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    val orders by viewModel.ordersList.collectAsStateWithLifecycle(emptyList())
+                    val lastOrder = orders.firstOrNull()
+
+                    // Last Order / Reorder (cols-4 equivalent)
+                    Card(
+                        modifier = Modifier
+                            .weight(1.5f)
+                            .height(115.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        border = BorderStroke(1.dp, BentoBorderColor)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "LAST ORDER",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = BentoPrimary,
+                                        letterSpacing = 1.sp
+                                    )
+                                    Text(
+                                        text = lastOrder?.itemSummary ?: "No past orders yet",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = BentoDarkText,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                Text(
+                                    text = if (lastOrder != null) viewModel.formatDate(lastOrder.timestamp).take(10) else "",
+                                    fontSize = 9.sp,
+                                    color = Color.Gray
+                                )
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (lastOrder != null) "Rs. ${lastOrder.totalAmount.toInt()}" else "Bhojan Nepal",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = BentoDarkText
+                                )
+                                if (lastOrder != null) {
+                                    Button(
+                                        onClick = {
+                                            viewModel.reorderPastItems(lastOrder)
+                                            Toast.makeText(context, "Added last order items to your cart!", Toast.LENGTH_SHORT).show()
+                                            viewModel.currentScreen = AppScreen.Cart
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = BentoPrimary),
+                                        contentPadding = PaddingValues(horizontal = 10.dp),
+                                        modifier = Modifier.height(28.dp)
+                                    ) {
+                                        Icon(imageVector = Icons.Default.Replay, contentDescription = null, modifier = Modifier.size(10.dp), tint = Color.White)
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("REORDER", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    }
+                                } else {
+                                    Text("Ready to order!", fontSize = 10.sp, color = Color.Gray)
+                                }
+                            }
+                        }
+                    }
+
+                    // Order Tracking (cols-2 equivalent)
+                    val activeOrder = viewModel.activeTrackingOrder
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(115.dp)
+                            .clickable {
+                                if (activeOrder != null) {
+                                    viewModel.currentScreen = AppScreen.OrderTracking
+                                } else {
+                                    Toast.makeText(context, "Start your Nepalese feast by placing an order!", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(containerColor = BentoSurface),
+                        border = BorderStroke(1.dp, BentoStatusBorder)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.LocalShipping,
+                                contentDescription = "Tracking Icon bento",
+                                tint = BentoPrimary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Column {
+                                Text(
+                                    text = "TRACKING",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = BentoDarkText,
+                                    letterSpacing = 1.sp
+                                )
+                                Text(
+                                    text = activeOrder?.status ?: "No active delivery",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = BentoPrimary,
+                                    maxLines = 2,
+                                    lineHeight = 13.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Payment partners mini row
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "PAY WITH",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = BentoMutedText,
+                        letterSpacing = 1.sp
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .size(width = 46.dp, height = 24.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFFE8F5E9)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("eSewa", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(width = 46.dp, height = 24.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFFF3E5F5)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Khalti", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6A1B9A))
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(width = 46.dp, height = 24.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFFE3F2FD)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Card", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1565C0))
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(width = 46.dp, height = 24.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFFECEFF1)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("COD", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF37474F))
+                        }
+                    }
+                }
             }
 
             // Horizontal Categories list
@@ -456,7 +904,7 @@ fun HomeScreen(viewModel: BhojanViewModel, favoriteList: List<com.example.db.Fav
                         text = "Browse Categories",
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp,
-                        color = DarkGray,
+                        color = BentoDarkText,
                         modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
                     )
 
@@ -466,9 +914,9 @@ fun HomeScreen(viewModel: BhojanViewModel, favoriteList: List<com.example.db.Fav
                     ) {
                         items(FoodMenu.categories) { category ->
                             val isSelected = viewModel.selectedCategory == category
-                            val backgroundColor = if (isSelected) BhojanRed else Color.White
-                            val textColor = if (isSelected) Color.White else DarkGray
-                            val borderAccent = if (isSelected) Color.Transparent else Color(0xFFEEEEEE)
+                            val backgroundColor = if (isSelected) BentoPrimary else Color.White
+                            val textColor = if (isSelected) Color.White else BentoDarkText
+                            val borderAccent = if (isSelected) Color.Transparent else BentoBorderColor
 
                             Surface(
                                 modifier = Modifier
@@ -477,7 +925,7 @@ fun HomeScreen(viewModel: BhojanViewModel, favoriteList: List<com.example.db.Fav
                                     .testTag("category_pill_$category"),
                                 color = backgroundColor,
                                 shape = RoundedCornerShape(20.dp),
-                                shadowElevation = 1.dp,
+                                shadowElevation = if (isSelected) 2.dp else 0.dp,
                                 border = BorderStroke(1.dp, borderAccent)
                             ) {
                                 Row(
@@ -495,7 +943,7 @@ fun HomeScreen(viewModel: BhojanViewModel, favoriteList: List<com.example.db.Fav
                                             else -> Icons.Default.RestaurantMenu
                                         },
                                         contentDescription = null,
-                                        tint = if (isSelected) Color.White else BhojanRed,
+                                        tint = if (isSelected) Color.White else BentoPrimary,
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
@@ -533,7 +981,7 @@ fun HomeScreen(viewModel: BhojanViewModel, favoriteList: List<com.example.db.Fav
                         text = "${viewModel.selectedCategory} Menu Items",
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 18.sp,
-                        color = DarkGray,
+                        color = BentoDarkText,
                         modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 12.dp)
                     )
                 }
@@ -563,32 +1011,25 @@ fun HomeScreen(viewModel: BhojanViewModel, favoriteList: List<com.example.db.Fav
 
 @Composable
 fun FeaturedBanner(viewModel: BhojanViewModel) {
-    // Custom beautiful vector styled banner displaying the legendary "Family Combo Rs. 1000" advertisement
+    val context = LocalContext.current
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp)
-            .height(160.dp),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(6.dp)
+            .height(165.dp),
+        shape = RoundedCornerShape(24.dp), // Bento deep rounding
+        colors = CardDefaults.cardColors(containerColor = BentoPromoBlue),
+        elevation = CardDefaults.cardElevation(0.dp) // Flat modern bento feel
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .drawBehind {
-                    // Nepali themed visual backplate
-                    drawRect(
-                        brush = Brush.linearGradient(
-                            colors = listOf(Color(0xFF880E4F), BhojanRed, Color(0xFFBF360C)),
-                            start = Offset(0f, 0f),
-                            end = Offset(size.width, size.height)
-                        )
-                    )
-                    // Visual plates layout decoration
+                    // Visual background glow decoration from HTML
                     drawCircle(
-                        color = Color.White.copy(alpha = 0.08f),
+                        color = BentoPromoBlueGlow.copy(alpha = 0.5f),
                         radius = size.height * 0.7f,
-                        center = Offset(size.width * 0.85f, size.height * 0.5f)
+                        center = Offset(size.width * 1.0f, size.height * 1.0f)
                     )
                 }
                 .padding(16.dp)
@@ -596,52 +1037,66 @@ fun FeaturedBanner(viewModel: BhojanViewModel) {
             Column(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .fillMaxWidth(0.65f),
-                verticalArrangement = Arrangement.Center
+                    .fillMaxWidth(0.7f),
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
-                Box(
-                    modifier = Modifier
-                        .background(BhojanGold, shape = RoundedCornerShape(4.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                    Text("HOT OFFER: ONLY RS 1000!", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                Column {
+                    Box(
+                        modifier = Modifier
+                            .background(BentoPromoBlueText, shape = RoundedCornerShape(20.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Text(
+                            text = "20% OFF ON KHAJA", 
+                            fontSize = 8.sp, 
+                            fontWeight = FontWeight.ExtraBold, 
+                            color = Color.White
+                        )
+                    }
+    
+                    Spacer(modifier = Modifier.height(6.dp))
+    
+                    Text(
+                        text = "NEPALESE FAMILY COMBO",
+                        color = BentoPromoBlueText,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Black,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    
+                    Text(
+                        text = "Use code: BHOJAN20 in checkout",
+                        color = BentoPromoBlueText.copy(alpha = 0.8f),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
-
                 Text(
-                    text = "FAMILY COMBO PLATER",
-                    color = Color.White,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.ExtraBold,
+                    text = "Mo:Mo + Chowmein + Burger + Coke. A complete feast!",
+                    color = BentoPromoBlueText.copy(alpha = 0.75f),
+                    fontSize = 10.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = "Mo:Mo (Buff) + Chowmein (Chicken) + Burger + 500ml Coca-Cola. Complete Nepalese Feast!",
-                    color = Color.White.copy(alpha = 0.85f),
-                    fontSize = 11.sp,
-                    maxLines = 2,
-                    lineHeight = 14.sp
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
 
                 Button(
                     onClick = {
                         val familyCombo = FoodMenu.menuList.find { it.id == "combo_family" }
                         familyCombo?.let {
                             viewModel.addItemToCart(it)
+                            Toast.makeText(context, "Nepalese Combo Added! Coupon code applied.", Toast.LENGTH_SHORT).show()
                         }
+                        viewModel.couponInput = "BHOJAN20"
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                    modifier = Modifier.height(32.dp)
+                    colors = ButtonDefaults.buttonColors(containerColor = BentoPromoBlueText),
+                    shape = RoundedCornerShape(100.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
+                    modifier = Modifier.height(30.dp)
                 ) {
-                    Text("Add Combo to Cart 🛒", color = BhojanRed, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("ADD TO CART", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Black)
                 }
             }
 
@@ -649,16 +1104,16 @@ fun FeaturedBanner(viewModel: BhojanViewModel) {
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .size(100.dp)
+                    .size(90.dp)
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.15f)),
+                    .background(Color.White.copy(alpha = 0.3f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.Fastfood,
-                    contentDescription = "Combo platter icon",
-                    tint = BhojanGold,
-                    modifier = Modifier.size(54.dp)
+                    contentDescription = "Combo Platter",
+                    tint = BentoPromoBlueText,
+                    modifier = Modifier.size(48.dp)
                 )
             }
         }
@@ -672,7 +1127,7 @@ fun FoodCard(item: FoodItem, viewModel: BhojanViewModel, favoriteList: List<com.
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(20.dp))
             .clickable {
                 viewModel.selectedFoodItem = item
                 viewModel.loadReviewsForFood(item.id)
@@ -680,16 +1135,17 @@ fun FoodCard(item: FoodItem, viewModel: BhojanViewModel, favoriteList: List<com.
             }
             .testTag("food_card_${item.id}"),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(2.dp)
+        border = BorderStroke(1.dp, BentoBorderColor.copy(alpha = 0.5f)),
+        elevation = CardDefaults.cardElevation(0.dp)
     ) {
         Column {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(120.dp)
+                    .height(115.dp)
                     .background(
                         Brush.verticalGradient(
-                            listOf(Color(0xFFFFF9E6), Color(0xFFFFEBEE))
+                            listOf(Color(0xFFFEF7FF), Color(0xFFF3EDF7))
                         )
                     )
             ) {
@@ -699,13 +1155,13 @@ fun FoodCard(item: FoodItem, viewModel: BhojanViewModel, favoriteList: List<com.
                         modifier = Modifier
                             .align(Alignment.TopStart)
                             .padding(8.dp)
-                            .background(BhojanRed, shape = RoundedCornerShape(4.dp))
+                            .background(BentoPrimary, shape = RoundedCornerShape(10.dp))
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text(
                             text = "${item.discountPercent}% OFF",
                             color = Color.White,
-                            fontSize = 10.sp,
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -725,7 +1181,7 @@ fun FoodCard(item: FoodItem, viewModel: BhojanViewModel, favoriteList: List<com.
                     Icon(
                         imageVector = if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                         contentDescription = "Favorite toggle",
-                        tint = if (isFav) BhojanRed else Color.Gray,
+                        tint = if (isFav) BentoPrimary else Color.Gray,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -740,9 +1196,9 @@ fun FoodCard(item: FoodItem, viewModel: BhojanViewModel, favoriteList: List<com.
                         else -> Icons.Default.DinnerDining
                     },
                     contentDescription = null,
-                    tint = BhojanRed.copy(alpha = 0.65f),
+                    tint = BentoPrimary.copy(alpha = 0.4f),
                     modifier = Modifier
-                        .size(54.dp)
+                        .size(48.dp)
                         .align(Alignment.Center)
                 )
             }
@@ -751,21 +1207,21 @@ fun FoodCard(item: FoodItem, viewModel: BhojanViewModel, favoriteList: List<com.
                 Text(
                     text = item.name,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    color = DarkGray
+                    color = BentoDarkText
                 )
 
                 Spacer(modifier = Modifier.height(2.dp))
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Default.Star, contentDescription = "Rating", tint = BhojanGold, modifier = Modifier.size(14.dp))
+                    Icon(imageVector = Icons.Default.Star, contentDescription = "Rating", tint = BhojanGold, modifier = Modifier.size(12.dp))
                     Spacer(modifier = Modifier.width(2.dp))
-                    Text(text = "${item.rating} (${item.reviewCount})", fontSize = 11.sp, color = Color.Gray)
+                    Text(text = "${item.rating} (${item.reviewCount})", fontSize = 10.sp, color = BentoMutedText)
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -776,7 +1232,7 @@ fun FoodCard(item: FoodItem, viewModel: BhojanViewModel, favoriteList: List<com.
                         if (item.discountPercent > 0) {
                             Text(
                                 text = "Rs. ${item.price.toInt()}",
-                                fontSize = 11.sp,
+                                fontSize = 10.sp,
                                 color = Color.Gray,
                                 style = TextStyle(
                                     textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough
@@ -786,19 +1242,19 @@ fun FoodCard(item: FoodItem, viewModel: BhojanViewModel, favoriteList: List<com.
                         Text(
                             text = "Rs. ${item.discountedPrice.toInt()}",
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 14.sp,
-                            color = BhojanRed
+                            fontSize = 13.sp,
+                            color = BentoPrimary
                         )
                     }
 
                     IconButton(
                         onClick = { viewModel.addItemToCart(item) },
-                        colors = IconButtonDefaults.iconButtonColors(containerColor = BhojanRed),
+                        colors = IconButtonDefaults.iconButtonColors(containerColor = BentoPrimary),
                         modifier = Modifier
-                            .size(32.dp)
+                            .size(30.dp)
                             .testTag("add_to_cart_${item.id}")
                     ) {
-                        Icon(imageVector = Icons.Default.Add, contentDescription = "Add to cart", tint = Color.White, modifier = Modifier.size(16.dp))
+                        Icon(imageVector = Icons.Default.Add, contentDescription = "Add to cart", tint = Color.White, modifier = Modifier.size(14.dp))
                     }
                 }
             }
@@ -1379,9 +1835,28 @@ fun CartScreen(viewModel: BhojanViewModel, items: List<CartItemEntity>) {
 // --- SCREEN 5: CHECKOUT (Location sensing Google Map, Nepal Payments) ---
 @Composable
 fun CheckoutScreen(viewModel: BhojanViewModel, items: List<CartItemEntity>) {
+    val context = LocalContext.current
     var deliverNotes by remember { mutableStateOf("") }
     var addressInputStr by remember { mutableStateOf(viewModel.selectedLocation.addressLine) }
     var selectedPayBy by remember { mutableStateOf("COD") } // COD, eSewa, Khalti, Fonepay, Card
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+        if (fineGranted || coarseGranted) {
+            viewModel.detectDeviceLocation { detectedStr ->
+                addressInputStr = detectedStr
+            }
+        } else {
+            Toast.makeText(context, "Location permission is required for auto-detection.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    LaunchedEffect(viewModel.selectedLocation.addressLine) {
+        addressInputStr = viewModel.selectedLocation.addressLine
+    }
 
     val subtotal = items.sumOf { it.discountedPrice * it.quantity }
     val appliedDiscount = viewModel.calcDiscountAmount(subtotal)
@@ -1419,30 +1894,45 @@ fun CheckoutScreen(viewModel: BhojanViewModel, items: List<CartItemEntity>) {
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(8.dp)
-                            .background(Color.White.copy(alpha = 0.9f), RoundedCornerShape(4.dp))
-                            .clickable {
-                                // Simulate modern geolocation polling Kathmandu coordination
-                                val kathmanduAreas = listOf(
-                                    Pair("Balaju Balaju-16, Kathmandu", Pair(27.7317, 85.3059)),
-                                    Pair("Thamel Tourism Hub, Kathmandu", Pair(27.7150, 85.3123)),
-                                    Pair("Patandurbar Square, Lalitpur", Pair(27.6744, 85.3250)),
-                                    Pair("New Road Business Hub, Kathmandu", Pair(27.7042, 85.3115)),
-                                    Pair("Kapan Monastery Area, Kathmandu", Pair(27.7365, 85.3621))
-                                )
-                                val chosen = kathmanduAreas.random()
-                                viewModel.selectedLocation = viewModel.selectedLocation.copy(
-                                    addressLine = chosen.first,
-                                    latitude = chosen.second.first,
-                                    longitude = chosen.second.second
-                                )
-                                addressInputStr = chosen.first
+                            .background(Color.White.copy(alpha = 0.95f), RoundedCornerShape(8.dp))
+                            .shadow(elevation = 2.dp, shape = RoundedCornerShape(8.dp))
+                            .clickable(enabled = !viewModel.isDetectingLocation) {
+                                val hasFine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                                val hasCoarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                                if (hasFine || hasCoarse) {
+                                    viewModel.detectDeviceLocation { detectedStr ->
+                                        addressInputStr = detectedStr
+                                    }
+                                } else {
+                                    locationPermissionLauncher.launch(
+                                        arrayOf(
+                                            Manifest.permission.ACCESS_FINE_LOCATION,
+                                            Manifest.permission.ACCESS_COARSE_LOCATION
+                                        )
+                                    )
+                                }
                             }
-                            .padding(8.dp)
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(imageVector = Icons.Default.MyLocation, contentDescription = null, tint = BhojanRed, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Detect Location (GPS)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = DarkGray)
+                            if (viewModel.isDetectingLocation) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = BentoPrimary,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Sensing GPS...", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = BentoPrimary)
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.MyLocation,
+                                    contentDescription = "GPS Sense",
+                                    tint = BentoPrimary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Detect Location (GPS)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = DarkGray)
+                            }
                         }
                     }
 
@@ -1455,6 +1945,36 @@ fun CheckoutScreen(viewModel: BhojanViewModel, items: List<CartItemEntity>) {
                             .size(36.dp)
                             .align(Alignment.Center)
                     )
+                }
+            }
+        }
+
+        viewModel.locationErrorMsg?.let { error ->
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFDE8E8)),
+                    border = BorderStroke(1.dp, Color(0xFFF8B4B4)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ErrorOutline,
+                            contentDescription = "Error",
+                            tint = Color(0xFF9B1C1C),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = error,
+                            color = Color(0xFF9B1C1C),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
             }
         }
